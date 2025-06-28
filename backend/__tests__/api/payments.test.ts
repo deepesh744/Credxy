@@ -1,5 +1,5 @@
-import { createMocks } from 'node-mocks-http'
 import handler from '../../api/payments'
+import { VercelRequest, VercelResponse } from '@vercel/node'
 
 // Mock dependencies
 jest.mock('@supabase/supabase-js', () => ({
@@ -35,15 +35,57 @@ jest.mock('stripe', () => {
   }))
 })
 
+// Helper to create mock request/response
+function createMockReqRes(options: {
+  method: string
+  headers?: Record<string, string>
+  body?: any
+}) {
+  const req = {
+    method: options.method,
+    headers: options.headers || {},
+    body: options.body || {},
+    query: {},
+    cookies: {},
+  } as unknown as VercelRequest
+
+  const res = {
+    status: jest.fn().mockReturnThis(),
+    json: jest.fn().mockReturnThis(),
+    end: jest.fn().mockReturnThis(),
+    setHeader: jest.fn().mockReturnThis(),
+    _getStatusCode: function() { 
+      const statusCall = (this.status as jest.Mock).mock.calls[0]
+      return statusCall ? statusCall[0] : 200 
+    },
+    _getData: function() { 
+      const jsonCall = (this.json as jest.Mock).mock.calls[0]
+      return jsonCall ? JSON.stringify(jsonCall[0]) : '' 
+    },
+    _getHeaders: function() {
+      const headers: Record<string, string> = {}
+      const calls = (this.setHeader as jest.Mock).mock.calls
+      calls.forEach(([key, value]) => {
+        headers[key.toLowerCase()] = value
+      })
+      return headers
+    }
+  } as unknown as VercelResponse & {
+    _getStatusCode: () => number
+    _getData: () => string
+    _getHeaders: () => Record<string, string>
+  }
+
+  return { req, res }
+}
+
 describe('/api/payments', () => {
   beforeEach(() => {
     jest.clearAllMocks()
   })
 
   it('should return 401 if no authorization header', async () => {
-    const { req, res } = createMocks({
-      method: 'POST',
-    })
+    const { req, res } = createMockReqRes({ method: 'POST' })
 
     await handler(req, res)
 
@@ -52,9 +94,7 @@ describe('/api/payments', () => {
   })
 
   it('should return 405 for non-POST requests', async () => {
-    const { req, res } = createMocks({
-      method: 'GET',
-    })
+    const { req, res } = createMockReqRes({ method: 'GET' })
 
     await handler(req, res)
 
@@ -63,9 +103,7 @@ describe('/api/payments', () => {
   })
 
   it('should handle OPTIONS requests for CORS', async () => {
-    const { req, res } = createMocks({
-      method: 'OPTIONS',
-    })
+    const { req, res } = createMockReqRes({ method: 'OPTIONS' })
 
     await handler(req, res)
 
