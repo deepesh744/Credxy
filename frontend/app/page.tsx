@@ -14,13 +14,13 @@ export default function Home() {
         </div>
         <div className="space-y-4">
           <Link
-            href="/signup"
+            href="/auth/signup"
             className="block w-full bg-indigo-600 text-white py-3 px-4 rounded-md hover:bg-indigo-700 transition"
           >
             Get Started
           </Link>
           <Link
-            href="/login"
+            href="/auth/login"
             className="block w-full bg-white text-indigo-600 border border-indigo-600 py-3 px-4 rounded-md hover:bg-indigo-50 transition"
           >
             Sign In
