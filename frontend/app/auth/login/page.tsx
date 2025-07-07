@@ -30,28 +30,63 @@ export default function Login() {
 
   const onSubmit = async (data: LoginData) => {
     try {
-      const { error: authError } = await supabase.auth.signInWithPassword({
+      setError(null)
+      
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
         email: data.email,
         password: data.password,
       })
 
-      if (authError) throw authError
+      if (authError) {
+        if (authError.message.includes('Email not confirmed')) {
+          setError('Please check your email and click the confirmation link before signing in.')
+          return
+        }
+        if (authError.message.includes('Invalid login credentials')) {
+          setError('Invalid email or password. Please check your credentials and try again.')
+          return
+        }
+        throw authError
+      }
 
-      // Get user profile to determine redirect
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
-        const { data: profile } = await supabase
+      if (authData.user) {
+        // Wait a moment for session to be established
+        await new Promise(resolve => setTimeout(resolve, 100))
+        
+        // Get user profile to determine redirect
+        const { data: profile, error: profileError } = await supabase
           .from('profiles')
           .select('user_type')
-          .eq('id', user.id)
+          .eq('id', authData.user.id)
           .single()
 
-        if (profile) {
-          router.push(profile.user_type === 'tenant' ? '/tenant/pay-rent' : '/landlord/properties')
+        if (profileError) {
+          console.warn('Profile fetch error:', profileError)
+          
+          // If profile doesn't exist, create it with default values from metadata
+          const userType = authData.user.user_metadata?.user_type || 'tenant'
+          const fullName = authData.user.user_metadata?.full_name || ''
+          
+          try {
+            await supabase
+              .from('profiles')
+              .insert({
+                id: authData.user.id,
+                user_type: userType,
+                full_name: fullName,
+              })
+          } catch (insertError) {
+            console.warn('Profile creation failed:', insertError)
+          }
+          
+          router.push(userType === 'tenant' ? '/dashboard/tenant/pay-rent' : '/dashboard/landlord/properties')
+        } else {
+          router.push(profile.user_type === 'tenant' ? '/dashboard/tenant/pay-rent' : '/dashboard/landlord/properties')
         }
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred')
+      console.error('Login error:', err)
+      setError(err instanceof Error ? err.message : 'An error occurred during login')
     }
   }
 
@@ -64,7 +99,7 @@ export default function Login() {
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600">
             Or{' '}
-            <Link href="/signup" className="font-medium text-indigo-600 hover:text-indigo-500">
+            <Link href="/auth/signup" className="font-medium text-indigo-600 hover:text-indigo-500">
               create a new account
             </Link>
           </p>
